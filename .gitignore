@@ -1,0 +1,54 @@
+# ─── Python / FastAPI ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+*.so
+
+# ─── Environment variables ──────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Next.js / Node ─────────────────────────────────────────────
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ─── Docker ─────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Databases / Volumes ────────────────────────────────────────
+*.sqlite3
+*.db
+postgres_data/
+pgdata/
+
+# ─── Logs ───────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── OS / Editor ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Pytest / Coverage ──────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
