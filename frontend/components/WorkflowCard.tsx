@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 import { RunGroup } from "@/components/RunGroup";
 import type { WorkflowEvent, WorkflowResponse } from "@/lib/types";
@@ -34,7 +34,7 @@ function runLastTimestamp(events: WorkflowEvent[]): number {
   return Math.max(...events.map((event) => new Date(event.timestamp).getTime()));
 }
 
-export function WorkflowCard({
+function WorkflowCardComponent({
   upc,
   workflow,
   loading,
@@ -123,6 +123,4 @@ export function WorkflowCard({
   );
 }
 
-
-
-
+export const WorkflowCard = memo(WorkflowCardComponent);

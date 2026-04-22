@@ -49,6 +49,7 @@ export default function HomePage() {
   const [hasLoadedKnownUpcs, setHasLoadedKnownUpcs] = useState(false);
   const [workflows, setWorkflows] = useState<Record<string, WorkflowResponse | null>>({});
   const [loadingByUpc, setLoadingByUpc] = useState<Record<string, boolean>>({});
+  const [backgroundLoadingByUpc, setBackgroundLoadingByUpc] = useState<Record<string, boolean>>({});
   const [errorByUpc, setErrorByUpc] = useState<Record<string, string | null>>({});
   const [replayLoading, setReplayLoading] = useState<Record<string, boolean>>({});
   const [rerunLoading, setRerunLoading] = useState<Record<string, boolean>>({});
@@ -57,13 +58,18 @@ export default function HomePage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [filterUpc, setFilterUpc] = useState<string | null>(null);
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [replayModalData, setReplayModalData] = useState<ReplayResponse | null>(null);
 
-  const refreshWorkflow = useCallback(async (upc: string): Promise<WorkflowResponse | null> => {
-    setLoadingByUpc((prev) => ({ ...prev, [upc]: true }));
+  const refreshWorkflow = useCallback(async (upc: string, isBackground = false): Promise<WorkflowResponse | null> => {
+    if (isBackground) {
+      setBackgroundLoadingByUpc((prev) => ({ ...prev, [upc]: true }));
+    } else {
+      setLoadingByUpc((prev) => ({ ...prev, [upc]: true }));
+    }
     setErrorByUpc((prev) => ({ ...prev, [upc]: null }));
 
     try {
@@ -76,7 +82,11 @@ export default function HomePage() {
       setWorkflows((prev) => ({ ...prev, [upc]: null }));
       return null;
     } finally {
-      setLoadingByUpc((prev) => ({ ...prev, [upc]: false }));
+      if (isBackground) {
+        setBackgroundLoadingByUpc((prev) => ({ ...prev, [upc]: false }));
+      } else {
+        setLoadingByUpc((prev) => ({ ...prev, [upc]: false }));
+      }
     }
   }, []);
 
@@ -109,7 +119,7 @@ export default function HomePage() {
       }
 
       const targets = knownUpcs.filter((upc) => {
-        if (loadingByUpc[upc]) {
+        if (loadingByUpc[upc] || backgroundLoadingByUpc[upc]) {
           return false;
         }
 
@@ -120,7 +130,7 @@ export default function HomePage() {
         return;
       }
 
-      void Promise.all(targets.map((upc) => refreshWorkflow(upc)));
+      void Promise.all(targets.map((upc) => refreshWorkflow(upc, true)));
     }, 2500);
 
     return () => {
@@ -129,10 +139,11 @@ export default function HomePage() {
   }, [knownUpcs, workflows, loadingByUpc, refreshWorkflow]);
 
   const sortedUpcs = useMemo(() => {
-    return [...knownUpcs].sort((a, b) => {
+    const list = filterUpc ? [filterUpc] : knownUpcs;
+    return [...list].sort((a, b) => {
       return getWorkflowTimestamp(workflows[b]) - getWorkflowTimestamp(workflows[a]);
     });
-  }, [knownUpcs, workflows]);
+  }, [knownUpcs, workflows, filterUpc]);
 
   const handleProduce = useCallback(
     async (upc: string) => {
@@ -176,6 +187,7 @@ export default function HomePage() {
         }
 
         setKnownUpcs((prev) => (prev.includes(upc) ? prev : [upc, ...prev]));
+        setFilterUpc(upc);
         setSubmitMessage(`Loaded workflow history for UPC ${upc}.`);
       } finally {
         setIsLoadingHistory(false);
@@ -246,6 +258,8 @@ export default function HomePage() {
         loadingLoad={isLoadingHistory}
         message={submitMessage}
         error={submitError}
+        filterUpc={filterUpc}
+        onClearFilter={() => setFilterUpc(null)}
       />
 
       {actionMessage ? (

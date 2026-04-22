@@ -14,7 +14,11 @@ export function StageView({ event }: StageViewProps) {
     event.payload && typeof event.payload === "object"
       ? (event.payload as Record<string, unknown>)
       : null;
-  const isGainsStage = event.stage.toUpperCase() === "GAINS";
+  const stage = event.stage.toUpperCase();
+  const isEnriched = stage === "ENRICHED";
+  const isTriage = stage === "TRIAGE";
+  const isGains = stage === "GAINS";
+  const isSummary = stage === "SUMMARY";
 
   const formattedTime = useMemo(() => {
     const value = new Date(event.timestamp);
@@ -27,14 +31,14 @@ export function StageView({ event }: StageViewProps) {
 
   const hasGains = useMemo(() => {
     return (
-      isGainsStage &&
+      isGains &&
       payload &&
       ("market_demand" in payload ||
         "resale_potential" in payload ||
         "refurbishment_complexity" in payload ||
         "expected_roi" in payload)
     );
-  }, [isGainsStage, payload]);
+  }, [isGains, payload]);
 
   const renderValue = (value: unknown): string | null => {
     if (typeof value === "string" || typeof value === "number") {
@@ -51,6 +55,27 @@ export function StageView({ event }: StageViewProps) {
         </span>
         <time className="text-xs text-slate-500">{formattedTime}</time>
       </div>
+
+      {isEnriched && payload && (
+        <div className="mt-4 rounded-lg border border-brand-200 bg-brand-50 p-3">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-bold text-brand-900">
+              {renderValue(payload.name) || renderValue(payload.product_name) || "Unknown Product"}
+            </p>
+            <p className="text-xs text-brand-700">
+              Condition: <span className="font-semibold">{renderValue(payload.condition) || "N/A"}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isTriage && payload && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-sm font-medium text-amber-900">
+            Recommended Triage Path --&gt; <span className="font-bold">{renderValue(payload.decision) || renderValue(payload.triage_decision) || "PENDING"}</span>
+          </p>
+        </div>
+      )}
 
       {hasGains && payload && (
         <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
@@ -100,16 +125,22 @@ export function StageView({ event }: StageViewProps) {
         </div>
       )}
 
-      {!isGainsStage ? (
-        <details className="mt-3 group">
-          <summary className="cursor-pointer text-sm font-medium text-slate-700 marker:text-brand-600">
-            Payload JSON
-          </summary>
-          <div className="mt-3">
-            <JsonViewer data={event.payload} />
-          </div>
-        </details>
-      ) : null}
+      {isSummary && payload && (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-sm text-slate-700 leading-relaxed">
+            {renderValue(payload.summary) || renderValue(payload.final_summary) || "No summary available."}
+          </p>
+        </div>
+      )}
+
+      <details className="mt-3 group">
+        <summary className="cursor-pointer text-sm font-medium text-slate-700 marker:text-brand-600">
+          {isEnriched ? "View Enriched Product JSON" : "View JSON"}
+        </summary>
+        <div className="mt-3">
+          <JsonViewer data={event.payload} />
+        </div>
+      </details>
     </article>
   );
 }

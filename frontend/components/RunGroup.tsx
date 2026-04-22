@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 
+import { memo } from "react";
 import { StageView } from "@/components/StageView";
 import type { WorkflowEvent } from "@/lib/types";
 
@@ -33,7 +34,7 @@ function mapStageName(stage: string): string {
   return stageMap[stage.toUpperCase()] || stage.toUpperCase();
 }
 
-export function RunGroup({
+function RunGroupComponent({
   upc,
   runId,
   events,
@@ -93,8 +94,17 @@ export function RunGroup({
       ) : null}
 
       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-          <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${progressPercent}%` }} />
+        <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200 relative">
+          <div 
+            className="h-full rounded-full bg-brand-600 transition-all duration-700 ease-in-out" 
+            style={{ width: `${progressPercent}%` }} 
+          />
+          {progressPercent < 100 && (
+            <div 
+              className="absolute inset-0 rounded-full animate-shimmer" 
+              style={{ width: `${progressPercent}%` }}
+            />
+          )}
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -125,5 +135,4 @@ export function RunGroup({
   );
 }
 
-
-
+export const RunGroup = memo(RunGroupComponent);

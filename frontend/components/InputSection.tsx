@@ -9,6 +9,8 @@ interface InputSectionProps {
   loadingLoad: boolean;
   message: string | null;
   error: string | null;
+  filterUpc: string | null;
+  onClearFilter: () => void;
 }
 
 export function InputSection({
@@ -17,7 +19,9 @@ export function InputSection({
   loadingSubmit,
   loadingLoad,
   message,
-  error
+  error,
+  filterUpc,
+  onClearFilter
 }: InputSectionProps) {
   const [upc, setUpc] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -93,6 +97,16 @@ export function InputSection({
           >
             {loadingLoad ? "Loading..." : "Load History"}
           </button>
+
+          {filterUpc && (
+            <button
+              type="button"
+              onClick={onClearFilter}
+              className="h-12 rounded-xl border border-brand-200 bg-brand-50 px-6 text-sm font-semibold text-brand-700 transition hover:bg-brand-100"
+            >
+              Show all tracked UPCs
+            </button>
+          )}
         </div>
       </form>
 
