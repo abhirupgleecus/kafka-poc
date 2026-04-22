@@ -64,6 +64,20 @@ export default function HomePage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [replayModalData, setReplayModalData] = useState<ReplayResponse | null>(null);
 
+  useEffect(() => {
+    if (submitMessage) {
+      const timer = setTimeout(() => setSubmitMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [submitMessage]);
+
+  useEffect(() => {
+    if (actionMessage) {
+      const timer = setTimeout(() => setActionMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionMessage]);
+
   const refreshWorkflow = useCallback(async (upc: string, isBackground = false): Promise<WorkflowResponse | null> => {
     if (isBackground) {
       setBackgroundLoadingByUpc((prev) => ({ ...prev, [upc]: true }));
@@ -281,7 +295,6 @@ export default function HomePage() {
         errorByUpc={errorByUpc}
         replayLoading={replayLoading}
         rerunLoading={rerunLoading}
-        onRefresh={handleRefresh}
         onReplay={handleReplay}
         onRerun={handleRerun}
       />

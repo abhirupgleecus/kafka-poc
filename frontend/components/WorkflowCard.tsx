@@ -10,7 +10,6 @@ interface WorkflowCardProps {
   workflow: WorkflowResponse | null;
   loading: boolean;
   error: string | null;
-  onRefresh: (upc: string) => Promise<void>;
   onReplay: (upc: string, runId: string) => Promise<void>;
   replayLoading: Record<string, boolean>;
   onRerun: (upc: string, runId: string) => Promise<void>;
@@ -39,7 +38,6 @@ function WorkflowCardComponent({
   workflow,
   loading,
   error,
-  onRefresh,
   onReplay,
   replayLoading,
   onRerun,
@@ -74,14 +72,6 @@ function WorkflowCardComponent({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onRefresh(upc)}
-            disabled={loading}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
           <button
             type="button"
             onClick={() => setExpanded((current) => !current)}

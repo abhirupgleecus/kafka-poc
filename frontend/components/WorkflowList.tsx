@@ -10,7 +10,6 @@ interface WorkflowListProps {
   errorByUpc: Record<string, string | null>;
   replayLoading: Record<string, boolean>;
   rerunLoading: Record<string, boolean>;
-  onRefresh: (upc: string) => Promise<void>;
   onReplay: (upc: string, runId: string) => Promise<void>;
   onRerun: (upc: string, runId: string) => Promise<void>;
 }
@@ -22,7 +21,6 @@ export function WorkflowList({
   errorByUpc,
   replayLoading,
   rerunLoading,
-  onRefresh,
   onReplay,
   onRerun
 }: WorkflowListProps) {
@@ -48,7 +46,6 @@ export function WorkflowList({
               workflow={workflows[upc] ?? null}
               loading={loadingByUpc[upc] ?? false}
               error={errorByUpc[upc] ?? null}
-              onRefresh={onRefresh}
               onReplay={onReplay}
               replayLoading={replayLoading}
               onRerun={onRerun}
