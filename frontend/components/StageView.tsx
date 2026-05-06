@@ -47,6 +47,26 @@ export function StageView({ event }: StageViewProps) {
     return null;
   };
 
+  const renderConditionSummary = (value: unknown): string => {
+    if (typeof value === "string" || typeof value === "number") {
+      return String(value);
+    }
+
+    if (!value || typeof value !== "object") {
+      return "N/A";
+    }
+
+    const condition = value as Record<string, unknown>;
+    const parts = [
+      renderValue(condition.physical_condition),
+      renderValue(condition.functional_status),
+      renderValue(condition.completeness),
+      renderValue(condition.estimated_age_usage_tier)
+    ].filter((part): part is string => Boolean(part));
+
+    return parts.length > 0 ? parts.join(" / ") : "N/A";
+  };
+
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
@@ -63,7 +83,7 @@ export function StageView({ event }: StageViewProps) {
               {renderValue(payload.name) || renderValue(payload.product_name) || "Unknown Product"}
             </p>
             <p className="text-xs text-brand-700">
-              Condition: <span className="font-semibold">{renderValue(payload.condition) || "N/A"}</span>
+              Condition: <span className="font-semibold">{renderConditionSummary(payload.condition)}</span>
             </p>
           </div>
         </div>

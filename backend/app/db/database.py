@@ -33,3 +33,6 @@ async def ensure_schema():
         await conn.execute(
             text("ALTER TABLE workflow_events ADD COLUMN IF NOT EXISTS run_id VARCHAR")
         )
+        await conn.execute(
+            text("ALTER TABLE products_summary ADD COLUMN IF NOT EXISTS assessment JSONB")
+        )

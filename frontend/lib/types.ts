@@ -47,6 +47,14 @@ export interface RerunResponse {
   condition: string;
 }
 
+export interface ProductAssessment {
+  physical_condition: string;
+  functional_status: string;
+  completeness: string;
+  estimated_age_usage_tier: string;
+}
+
 export interface ProduceRequest {
   upc: string;
+  assessment: ProductAssessment;
 }

@@ -12,6 +12,8 @@ interface WorkflowListProps {
   rerunLoading: Record<string, boolean>;
   onReplay: (upc: string, runId: string) => Promise<void>;
   onRerun: (upc: string, runId: string) => Promise<void>;
+  timeFilter: "today" | "week" | "month" | "all";
+  onTimeFilterChange: (value: "today" | "week" | "month" | "all") => void;
 }
 
 export function WorkflowList({
@@ -22,12 +24,29 @@ export function WorkflowList({
   replayLoading,
   rerunLoading,
   onReplay,
-  onRerun
+  onRerun,
+  timeFilter,
+  onTimeFilterChange
 }: WorkflowListProps) {
   return (
     <section className="mx-auto mt-8 w-full max-w-6xl">
-      <div className="mb-4">
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-ink">Workflow History</h2>
+        
+        <div className="flex items-center gap-2">
+          <label htmlFor="time-filter" className="text-xs font-semibold text-slate-500 uppercase">Filter:</label>
+          <select
+            id="time-filter"
+            value={timeFilter}
+            onChange={(e) => onTimeFilterChange(e.target.value as any)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none transition focus:border-brand-500"
+          >
+            <option value="all">Show All</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+          </select>
+        </div>
       </div>
 
       {upcs.length === 0 ? (

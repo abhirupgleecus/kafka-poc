@@ -1,6 +1,5 @@
 import asyncio
 import json
-import random
 import os
 import traceback
 import logging
@@ -10,6 +9,7 @@ from dotenv import load_dotenv
 from sqlalchemy import select
 
 from app.services.enrichment_service import generate_product_data
+from app.services.condition_service import condition_bucket, ensure_condition_payload
 from app.db.database import AsyncSessionLocal, ensure_schema
 from app.models.workflow import WorkflowEvent
 
@@ -70,8 +70,10 @@ async def consume():
                 # 1. Call LLM
                 product = await generate_product_data(upc)
 
-                # 2. Add condition and workflow identifiers
-                product["condition"] = random.choice(["GOOD", "FAIR", "POOR"])
+                # 2. Persist the full user assessment for downstream stages.
+                assessment = ensure_condition_payload(event.get("assessment"))
+                product["condition"] = assessment
+                product["condition_bucket"] = condition_bucket(assessment)
                 product["upc"] = upc
                 product["run_id"] = run_id
 

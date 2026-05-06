@@ -4,6 +4,7 @@ import os
 
 import google.generativeai as genai
 from dotenv import load_dotenv
+from app.services.condition_service import condition_display
 
 load_dotenv()
 
@@ -39,7 +40,8 @@ Given:
 Write a short 2-3 sentence explanation explaining WHY this decision was made.
 
 Focus on:
-- condition
+- the full condition assessment
+- if `condition` is an object, mention the important subfields that drove the outcome
 - resale value
 - profitability
 - market demand and ROI signals
@@ -60,7 +62,7 @@ Gains:
     fallback = (
         f"UPC {product.get('upc', 'UNKNOWN')} was classified as "
         f"{decision.get('decision', 'UNKNOWN')} based on condition "
-        f"{product.get('condition', 'UNKNOWN')} and expected profitability "
+        f"{condition_display(product.get('condition'))} and expected profitability "
         f"of {decision.get('estimated_profit_percentage', 0)}%. "
         f"Market demand is {gains_payload.get('market_demand', 'UNKNOWN')}, "
         f"resale potential is {gains_payload.get('resale_potential', 'UNKNOWN')}, "

@@ -6,6 +6,7 @@ from typing import Any
 
 import google.generativeai as genai
 from dotenv import load_dotenv
+from app.services.condition_service import condition_bucket, condition_details
 
 load_dotenv()
 
@@ -106,24 +107,87 @@ def _choice(value: Any, allowed: set[str], fallback: str) -> str:
 
 
 def _fallback_gains(product: dict[str, Any], triage_decision: dict[str, Any]) -> dict[str, Any]:
-    condition = str(product.get("condition", "")).upper()
+    assessment = condition_details(product.get("condition"))
+    condition = condition_bucket(assessment)
     decision = str(triage_decision.get("decision", "")).upper()
     triage_pct = _to_float(triage_decision.get("estimated_profit_percentage"), 0.0)
+    physical_condition = assessment["physical_condition"]
+    functional_status = assessment["functional_status"]
+    completeness = assessment["completeness"]
+    age_usage_tier = assessment["estimated_age_usage_tier"]
+
+    if physical_condition == "Excellent":
+        physical_bonus = 2
+    elif physical_condition == "Good":
+        physical_bonus = 1
+    elif physical_condition == "Fair":
+        physical_bonus = 0
+    elif physical_condition == "Poor":
+        physical_bonus = -1
+    else:
+        physical_bonus = -2
+
+    if functional_status == "Fully Working":
+        functional_bonus = 2
+    elif functional_status == "Partially Working":
+        functional_bonus = 1
+    elif functional_status == "Powers On But Faulty":
+        functional_bonus = -1
+    else:
+        functional_bonus = -2
+
+    if completeness == "Complete":
+        completeness_bonus = 2
+    elif completeness == "Missing Accessories":
+        completeness_bonus = 1
+    elif completeness == "Missing Key Components":
+        completeness_bonus = -1
+    else:
+        completeness_bonus = -2
+
+    if age_usage_tier == "Like New (0-1 yr)":
+        age_bonus = 2
+    elif age_usage_tier == "Lightly Used (1-3 yr)":
+        age_bonus = 1
+    elif age_usage_tier == "Moderately Used (3-5 yr)":
+        age_bonus = 0
+    else:
+        age_bonus = -1
+
+    health_score = physical_bonus + functional_bonus + completeness_bonus + age_bonus
 
     if decision == "REFURBISH":
-        market_demand = "HIGH"
-        resale_potential = "EXCELLENT" if condition == "GOOD" else "GOOD"
-        refurb_complexity = "MEDIUM" if condition == "GOOD" else "HIGH"
-        expected_roi = max(40.0, triage_pct + 25.0)
+        market_demand = "HIGH" if health_score >= 4 else "MEDIUM"
+        if health_score >= 6:
+            resale_potential = "EXCELLENT"
+        elif health_score >= 3:
+            resale_potential = "GOOD"
+        else:
+            resale_potential = "FAIR"
+
+        if functional_status == "Fully Working" and completeness == "Complete":
+            refurb_complexity = "LOW"
+        elif completeness == "Missing Key Components" or functional_status == "Powers On But Faulty":
+            refurb_complexity = "HIGH"
+        else:
+            refurb_complexity = "MEDIUM"
+
+        expected_roi = max(35.0, triage_pct + 20.0 + (health_score * 2.0))
     elif decision == "HARVEST":
-        market_demand = "MEDIUM"
-        resale_potential = "GOOD" if condition in {"GOOD", "FAIR"} else "FAIR"
-        refurb_complexity = "LOW"
-        expected_roi = max(20.0, triage_pct + 10.0)
+        market_demand = "MEDIUM" if health_score >= 0 else "LOW"
+        if completeness in {"Complete", "Missing Accessories"} and functional_status in {"Fully Working", "Partially Working"}:
+            resale_potential = "GOOD"
+        elif condition == "GOOD":
+            resale_potential = "GOOD"
+        else:
+            resale_potential = "FAIR"
+
+        refurb_complexity = "LOW" if completeness != "Missing Key Components" else "MEDIUM"
+        expected_roi = max(15.0, triage_pct + 8.0 + max(health_score, -1))
     else:
         market_demand = "LOW"
         resale_potential = "POOR"
-        refurb_complexity = "LOW"
+        refurb_complexity = "LOW" if functional_status == "Dead" else "MEDIUM"
         expected_roi = 0.0
 
     return {
@@ -176,7 +240,9 @@ Return ONLY JSON with these fields:
 }}
 
 Consider:
-- Current condition and historical data
+- Current condition assessment and historical data
+- If `condition` is a structured object, use all of its subfields
+- If `condition_bucket` is present, treat it only as a coarse summary
 - Market demand for this product type
 - Refurbishment complexity vs resale value
 - Expected return on investment

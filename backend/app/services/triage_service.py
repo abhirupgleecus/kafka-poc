@@ -6,6 +6,7 @@ from typing import Any
 
 import google.generativeai as genai
 from dotenv import load_dotenv
+from app.services.condition_service import condition_bucket, condition_details, condition_reasoning_summary
 
 load_dotenv()
 
@@ -105,31 +106,63 @@ def _to_float(value: Any, default: float = 0.0) -> float:
 
 
 def _fallback_triage(product: dict[str, Any]) -> dict[str, Any]:
-    condition = str(product.get("condition", "")).upper()
+    assessment = condition_details(product.get("condition"))
+    condition = condition_bucket(assessment)
     estimated_price = _to_float(product.get("estimated_price"), 0.0)
+    physical_condition = assessment["physical_condition"]
+    functional_status = assessment["functional_status"]
+    completeness = assessment["completeness"]
+    age_usage_tier = assessment["estimated_age_usage_tier"]
 
-    if condition == "POOR":
+    if (
+        physical_condition == "Damaged"
+        or functional_status == "Dead"
+        or completeness == "Heavily Stripped"
+    ):
         decision = "SCRAP"
-        reason = "Condition is POOR, so refurbishment is unlikely to be profitable."
+        reason = (
+            "Assessment indicates "
+            f"{condition_reasoning_summary(assessment)}, which makes refurbishment unlikely to be profitable."
+        )
         pct = 0.0
-    elif condition == "GOOD":
-        if estimated_price >= 200:
+    elif (
+        physical_condition in {"Excellent", "Good"}
+        and functional_status == "Fully Working"
+        and completeness == "Complete"
+    ):
+        if estimated_price >= 150:
             decision = "REFURBISH"
-            reason = "Condition is GOOD with strong resale value, so refurbish has best upside."
+            reason = (
+                "Assessment indicates "
+                f"{condition_reasoning_summary(assessment)}, which supports refurbishment upside."
+            )
             pct = 35.0
         else:
             decision = "HARVEST"
-            reason = "Condition is GOOD but resale is moderate, so component harvest is safer."
+            reason = (
+                "Assessment indicates "
+                f"{condition_reasoning_summary(assessment)}, but resale is moderate, so component harvest is safer."
+            )
             pct = 20.0
     else:
-        if estimated_price >= 150:
+        if (
+            functional_status in {"Partially Working", "Powers On But Faulty"}
+            or completeness in {"Missing Accessories", "Missing Key Components"}
+            or age_usage_tier in {"Moderately Used (3-5 yr)", "Heavily Used (5+ yr)"}
+        ) and estimated_price >= 75:
             decision = "HARVEST"
-            reason = "Condition is FAIR and resale is moderate, so harvest is the balanced option."
+            reason = (
+                "Assessment indicates "
+                f"{condition_reasoning_summary(assessment)}, so harvest is the balanced option."
+            )
             pct = 15.0
         else:
-            decision = "SCRAP"
-            reason = "Condition and price indicate low upside, so scrap minimizes risk."
-            pct = 0.0
+            decision = "SCRAP" if condition == "POOR" else "HARVEST"
+            reason = (
+                "Assessment indicates "
+                f"{condition_reasoning_summary(assessment)}, and price signals limited upside."
+            )
+            pct = 0.0 if decision == "SCRAP" else 10.0
 
     amount = round((estimated_price * pct) / 100.0, 2)
     return {
@@ -179,7 +212,14 @@ Given product data, choose ONLY one:
 Goal: maximize profit.
 
 Rules:
-- Consider condition VERY IMPORTANT
+- Consider the condition assessment VERY IMPORTANT
+- The `condition` field may be a structured object with:
+  - physical_condition
+  - functional_status
+  - completeness
+  - estimated_age_usage_tier
+- Use all provided condition subfields in your reasoning, not just physical_condition
+- If `condition_bucket` is present, treat it only as a derived summary, not the primary evidence
 - Consider estimated_price
 - Consider Historical data of similar products (use your knowledge)
 

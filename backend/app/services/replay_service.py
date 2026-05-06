@@ -1,5 +1,4 @@
 import os
-import random
 import uuid
 import json
 from datetime import datetime, timezone
@@ -9,6 +8,7 @@ from aiokafka import AIOKafkaConsumer
 from aiokafka.structs import TopicPartition
 from sqlalchemy import desc, select
 
+from app.services.condition_service import condition_bucket, condition_display, ensure_condition_payload
 from app.db.database import AsyncSessionLocal
 from app.kafka.producer import send_event
 from app.models.workflow import WorkflowEvent
@@ -24,9 +24,6 @@ KAFKA_STAGE_TOPIC_MAP = {
 }
 
 RUN_STAGES = ("RAW", "ENRICHED", "TRIAGE", "GAINS", "SUMMARY")
-RANDOM_CONDITIONS = ("GOOD", "FAIR", "POOR")
-
-
 def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -231,18 +228,25 @@ async def fetch_run_history(upc: str, run_id: str) -> dict[str, Any]:
 
 async def rerun_from_enriched(upc: str, run_id: str) -> dict[str, Any]:
     stage_payloads = await _fetch_stage_payloads_from_db(upc, run_id)
+    source_raw = _safe_dict(stage_payloads.get("RAW", {}).get("payload"))
     source_enriched = _safe_dict(stage_payloads.get("ENRICHED", {}).get("payload"))
 
     if not source_enriched:
         raise ValueError(f"No ENRICHED data found for UPC {upc} and run_id {run_id}")
 
     new_run_id = str(uuid.uuid4())
-    new_condition = random.choice(RANDOM_CONDITIONS)
+    assessment_source = (
+        source_enriched.get("assessment")
+        or source_raw.get("assessment")
+        or source_enriched.get("condition")
+    )
+    new_condition = ensure_condition_payload(assessment_source)
 
     rerun_payload = dict(source_enriched)
     rerun_payload["upc"] = upc
     rerun_payload["run_id"] = new_run_id
     rerun_payload["condition"] = new_condition
+    rerun_payload["condition_bucket"] = condition_bucket(new_condition)
 
     await send_event("enriched_events", rerun_payload)
 
@@ -262,5 +266,5 @@ async def rerun_from_enriched(upc: str, run_id: str) -> dict[str, Any]:
         "upc": upc,
         "source_run_id": run_id,
         "run_id": new_run_id,
-        "condition": new_condition,
+        "condition": condition_display(new_condition),
     }

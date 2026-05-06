@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from sqlalchemy import select, desc
 
 from app.services.summary_service import generate_summary
+from app.services.condition_service import ensure_condition_payload
 from app.db.database import AsyncSessionLocal, ensure_schema
 from app.models.workflow import WorkflowEvent
 from app.models.product import ProductSummary
@@ -158,6 +159,8 @@ async def consume():
                 # 2. Store final summary
                 async with AsyncSessionLocal() as db:
                     # Use estimated_profit_percentage from triage response
+                    product_payload = _safe_payload(product)
+                    assessment = ensure_condition_payload(product_payload.get("condition"))
                     estimated_profit = _to_float(
                         triage_payload.get(
                             "estimated_profit_percentage",
@@ -180,6 +183,7 @@ async def consume():
                         final_decision=decision,
                         estimated_profit=float(estimated_profit),
                         summary=summary,
+                        assessment=assessment,
                     )
 
                     await db.merge(summary_row)

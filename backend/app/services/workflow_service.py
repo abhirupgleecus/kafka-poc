@@ -3,6 +3,7 @@ from sqlalchemy import select, asc
 from app.models.workflow import WorkflowEvent
 from app.models.product import ProductSummary
 from app.db.database import AsyncSessionLocal
+from app.services.condition_service import condition_display, ensure_condition_payload
 
 
 def _safe_payload(payload):
@@ -14,7 +15,7 @@ def _build_fallback_summary(upc: str, enriched_payload: dict, triage_payload: di
     reason = triage_payload.get("reason", "No reason provided")
     estimated_profit = triage_payload.get("estimated_profit", "N/A")
     product_name = enriched_payload.get("name", "Unknown product")
-    condition = enriched_payload.get("condition", "UNKNOWN")
+    condition = condition_display(enriched_payload.get("condition"))
 
     return (
         f"UPC {upc}: Decision={decision}, Estimated Profit={estimated_profit}. "
@@ -126,6 +127,7 @@ async def _repair_workflow_for_upc(upc: str):
             summary_text = summary_payload.get("summary")
             if not isinstance(summary_text, str) or not summary_text.strip():
                 summary_text = _build_fallback_summary(upc, enriched_payload, triage_payload)
+            assessment = ensure_condition_payload(enriched_payload.get("condition"))
 
             # Ensure products_summary row is present.
             summary_row = ProductSummary(
@@ -133,6 +135,7 @@ async def _repair_workflow_for_upc(upc: str):
                 final_decision=str(decision),
                 estimated_profit=float(estimated_profit),
                 summary=summary_text,
+                assessment=assessment,
             )
             await db.merge(summary_row)
             changed = True

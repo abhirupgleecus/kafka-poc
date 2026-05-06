@@ -21,6 +21,8 @@ async def produce_event(data: UPCRequest, db: AsyncSession = Depends(get_db)):
         "run_id": run_id,
         "timestamp": datetime.utcnow().isoformat(),
     }
+    if data.assessment is not None:
+        event["assessment"] = data.assessment.model_dump()
 
     # Kafka
     await send_event("raw_events", event)

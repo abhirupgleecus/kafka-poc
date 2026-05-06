@@ -7,7 +7,7 @@ import { ReplayHistoryModal } from "@/components/ReplayHistoryModal";
 import { WorkflowList } from "@/components/WorkflowList";
 import { fetchWorkflow, produceUpc, replayStage, rerunStage } from "@/lib/api";
 import { readKnownUpcs, writeKnownUpcs } from "@/lib/storage";
-import type { ReplayResponse, WorkflowResponse } from "@/lib/types";
+import type { ProduceRequest, ReplayResponse, WorkflowResponse } from "@/lib/types";
 
 function getWorkflowTimestamp(workflow: WorkflowResponse | null | undefined): number {
   if (!workflow || workflow.events.length === 0) {
@@ -59,6 +59,7 @@ export default function HomePage() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [filterUpc, setFilterUpc] = useState<string | null>(null);
+  const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("all");
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -153,14 +154,34 @@ export default function HomePage() {
   }, [knownUpcs, workflows, loadingByUpc, refreshWorkflow]);
 
   const sortedUpcs = useMemo(() => {
-    const list = filterUpc ? [filterUpc] : knownUpcs;
+    let list = filterUpc ? [filterUpc] : knownUpcs;
+
+    if (timeFilter !== "all") {
+      const now = new Date();
+      let threshold = 0;
+
+      if (timeFilter === "today") {
+        threshold = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      } else if (timeFilter === "week") {
+        threshold = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+      } else if (timeFilter === "month") {
+        threshold = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+      }
+
+      list = list.filter((upc) => {
+        const timestamp = getWorkflowTimestamp(workflows[upc]);
+        return timestamp >= threshold;
+      });
+    }
+
     return [...list].sort((a, b) => {
       return getWorkflowTimestamp(workflows[b]) - getWorkflowTimestamp(workflows[a]);
     });
-  }, [knownUpcs, workflows, filterUpc]);
+  }, [knownUpcs, workflows, filterUpc, timeFilter]);
 
   const handleProduce = useCallback(
-    async (upc: string) => {
+    async (payload: ProduceRequest) => {
+      const upc = payload.upc;
       setIsSubmitting(true);
       setSubmitMessage(null);
       setSubmitError(null);
@@ -168,10 +189,10 @@ export default function HomePage() {
       setActionError(null);
 
       try {
-        await produceUpc({ upc });
+        await produceUpc(payload);
 
         setKnownUpcs((prev) => (prev.includes(upc) ? prev : [upc, ...prev]));
-        setSubmitMessage(`UPC ${upc} submitted. RAW stage event created.`);
+        setSubmitMessage(`UPC ${upc} submitted with manual assessment. RAW stage event created.`);
 
         await refreshWorkflow(upc);
       } catch (error) {
@@ -297,6 +318,8 @@ export default function HomePage() {
         rerunLoading={rerunLoading}
         onReplay={handleReplay}
         onRerun={handleRerun}
+        timeFilter={timeFilter}
+        onTimeFilterChange={setTimeFilter}
       />
 
       <ReplayHistoryModal data={replayModalData} onClose={() => setReplayModalData(null)} />
