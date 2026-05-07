@@ -108,17 +108,17 @@ def _normalize_product(upc: str, raw: dict[str, Any]) -> dict[str, Any]:
 
 async def generate_product_data(upc: str) -> dict:
     prompt = f"""
-You are a product data generator.
+        You are a product data generator.
 
-Given a UPC, generate a realistic product JSON.
+        Given a UPC, generate a realistic product JSON.
 
-Constraints:
-- Return ONLY JSON
-- Fields:
-  name, category, brand, estimated_price
+        Constraints:
+        - Return ONLY JSON
+        - Fields:
+        name, category, brand, estimated_price
 
-UPC: {upc}
-"""
+        UPC: {upc}
+        """
 
     try:
         response = await asyncio.to_thread(model.generate_content, prompt)

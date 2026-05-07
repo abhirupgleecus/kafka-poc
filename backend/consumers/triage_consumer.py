@@ -6,8 +6,9 @@ import logging
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from dotenv import load_dotenv
-from sqlalchemy import select
+from sqlalchemy import desc, select
 
+from app.services.condition_service import condition_bucket, ensure_condition_payload
 from app.services.triage_service import generate_triage_decision
 from app.db.database import AsyncSessionLocal, ensure_schema
 from app.models.workflow import WorkflowEvent
@@ -26,7 +27,7 @@ async def consume():
     await ensure_schema()
 
     consumer = AIOKafkaConsumer(
-        "enriched_events",
+        "assessment_events",
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         group_id=TRIAGE_GROUP_ID,
         value_deserializer=lambda x: json.loads(x.decode("utf-8")),
@@ -42,9 +43,9 @@ async def consume():
     try:
         async for msg in consumer:
             try:
-                product = msg.value
-                upc = product["upc"]
-                run_id = product.get("run_id")
+                assessment_event = msg.value
+                upc = assessment_event["upc"]
+                run_id = assessment_event.get("run_id")
 
                 if not run_id:
                     logger.error(f"[TRIAGE ERROR] Missing run_id for UPC {upc}")
@@ -66,8 +67,34 @@ async def consume():
                         )
                         continue
 
+                async with AsyncSessionLocal() as db:
+                    enriched_result = await db.execute(
+                        select(WorkflowEvent.payload)
+                        .where(
+                            WorkflowEvent.upc == upc,
+                            WorkflowEvent.run_id == run_id,
+                            WorkflowEvent.stage == "ENRICHED",
+                        )
+                        .order_by(desc(WorkflowEvent.timestamp))
+                        .limit(1)
+                    )
+                    product = enriched_result.scalar()
+
+                if not product:
+                    logger.error(
+                        f"[TRIAGE ERROR] No ENRICHED data for UPC {upc} and run_id {run_id}"
+                    )
+                    continue
+
+                assessment = ensure_condition_payload(assessment_event.get("assessment"))
+                product_for_triage = dict(product)
+                product_for_triage["assessment"] = assessment
+                product_for_triage["condition_bucket"] = condition_bucket(assessment)
+                product_for_triage["upc"] = upc
+                product_for_triage["run_id"] = run_id
+
                 # 1. Call LLM
-                decision = await generate_triage_decision(product)
+                decision = await generate_triage_decision(product_for_triage)
 
                 decision["upc"] = upc
                 decision["run_id"] = run_id

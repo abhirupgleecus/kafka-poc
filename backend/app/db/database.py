@@ -9,7 +9,12 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 SQL_ECHO = os.getenv("SQL_ECHO", "false").lower() in {"1", "true", "yes", "on"}
 
-engine = create_async_engine(DATABASE_URL, echo=SQL_ECHO)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=SQL_ECHO,
+    pool_pre_ping=True,
+    pool_recycle=300
+)
 
 AsyncSessionLocal = sessionmaker(
     bind=engine,

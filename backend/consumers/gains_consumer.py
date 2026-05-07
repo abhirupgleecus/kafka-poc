@@ -105,9 +105,26 @@ async def consume():
                     )
                     product = result.scalar()
 
+                    assessment_result = await db.execute(
+                        select(WorkflowEvent.payload)
+                        .where(
+                            WorkflowEvent.upc == upc,
+                            WorkflowEvent.stage == "ASSESSMENT",
+                            WorkflowEvent.run_id == run_id,
+                        )
+                        .order_by(desc(WorkflowEvent.timestamp))
+                        .limit(1)
+                    )
+                    assessment_event = assessment_result.scalar()
+
                 if not product:
                     logger.error(
                         f"[GAINS ERROR] No ENRICHED data for UPC {upc} and run_id {run_id}"
+                    )
+                    continue
+                if not assessment_event:
+                    logger.error(
+                        f"[GAINS ERROR] No ASSESSMENT data for UPC {upc} and run_id {run_id}"
                     )
                     continue
 
@@ -122,8 +139,12 @@ async def consume():
                     0.0,
                 )
 
+                product_for_gains = dict(product)
+                if isinstance(assessment_event, dict):
+                    product_for_gains["assessment"] = assessment_event.get("assessment")
+
                 # 1. Generate gains analysis
-                gains = await generate_gains(product, triage_decision)
+                gains = await generate_gains(product_for_gains, triage_decision)
 
                 gains["upc"] = upc
                 gains["run_id"] = run_id

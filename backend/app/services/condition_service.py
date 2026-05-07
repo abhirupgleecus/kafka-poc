@@ -22,18 +22,21 @@ COMPLETENESS_OPTIONS = (
     "Missing Key Components",
     "Heavily Stripped",
 )
-AGE_USAGE_TIER_OPTIONS = (
-    "Like New (0-1 yr)",
-    "Lightly Used (1-3 yr)",
-    "Moderately Used (3-5 yr)",
-    "Heavily Used (5+ yr)",
+AGE_OF_PRODUCT_OPTIONS = (
+    "0-1 years",
+    "1-5 years",
+    "5-10 years",
+    "10+ years",
 )
+
+# Backward-compatible alias for older imports and payloads.
+AGE_USAGE_TIER_OPTIONS = AGE_OF_PRODUCT_OPTIONS
 
 ASSESSMENT_OPTION_MAP = {
     "physical_condition": set(PHYSICAL_CONDITION_OPTIONS),
     "functional_status": set(FUNCTIONAL_STATUS_OPTIONS),
     "completeness": set(COMPLETENESS_OPTIONS),
-    "estimated_age_usage_tier": set(AGE_USAGE_TIER_OPTIONS),
+    "age_of_product": set(AGE_OF_PRODUCT_OPTIONS),
 }
 
 LEGACY_CONDITION_TO_PHYSICAL = {
@@ -49,9 +52,20 @@ def normalize_assessment_payload(value: Any) -> dict[str, str] | None:
     if not isinstance(value, dict):
         return None
 
+    age_of_product = value.get("age_of_product")
+    if not isinstance(age_of_product, str):
+        legacy_age_value = value.get("estimated_age_usage_tier")
+        if isinstance(legacy_age_value, str):
+            age_of_product = {
+                "Like New (0-1 yr)": "0-1 years",
+                "Lightly Used (1-3 yr)": "1-5 years",
+                "Moderately Used (3-5 yr)": "5-10 years",
+                "Heavily Used (5+ yr)": "10+ years",
+            }.get(legacy_age_value.strip())
+
     normalized: dict[str, str] = {}
     for field_name, allowed_values in ASSESSMENT_OPTION_MAP.items():
-        candidate = value.get(field_name)
+        candidate = age_of_product if field_name == "age_of_product" else value.get(field_name)
         if not isinstance(candidate, str):
             return None
 
@@ -74,38 +88,57 @@ def build_fallback_assessment(legacy_condition: Any = None) -> dict[str, str]:
     if physical_condition == "Excellent":
         functional_status = "Fully Working"
         completeness = "Complete"
-        estimated_age_usage_tier = "Like New (0-1 yr)"
+        age_of_product = "0-1 years"
     elif physical_condition == "Good":
         functional_status = "Fully Working"
         completeness = "Complete"
-        estimated_age_usage_tier = "Lightly Used (1-3 yr)"
+        age_of_product = "1-5 years"
     elif physical_condition == "Fair":
         functional_status = "Partially Working"
         completeness = "Missing Accessories"
-        estimated_age_usage_tier = "Moderately Used (3-5 yr)"
+        age_of_product = "5-10 years"
     elif physical_condition == "Poor":
         functional_status = "Powers On But Faulty"
         completeness = "Missing Key Components"
-        estimated_age_usage_tier = "Heavily Used (5+ yr)"
+        age_of_product = "10+ years"
     else:
         functional_status = "Dead"
         completeness = "Heavily Stripped"
-        estimated_age_usage_tier = "Heavily Used (5+ yr)"
+        age_of_product = "10+ years"
 
     return {
         "physical_condition": physical_condition,
         "functional_status": functional_status,
         "completeness": completeness,
-        "estimated_age_usage_tier": estimated_age_usage_tier,
+        "age_of_product": age_of_product,
     }
 
 
+def extract_assessment_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        normalized = normalize_assessment_payload(value)
+        if normalized:
+            return normalized
+
+        for field_name in ("assessment", "condition"):
+            nested_value = value.get(field_name)
+            nested_normalized = normalize_assessment_payload(nested_value)
+            if nested_normalized:
+                return nested_normalized
+
+            if nested_value is not None:
+                return nested_value
+
+    return value
+
+
 def ensure_condition_payload(value: Any) -> dict[str, str]:
-    normalized = normalize_assessment_payload(value)
+    extracted = extract_assessment_payload(value)
+    normalized = normalize_assessment_payload(extracted)
     if normalized:
         return normalized
 
-    return build_fallback_assessment(value)
+    return build_fallback_assessment(extracted)
 
 
 def condition_details(value: Any) -> dict[str, str]:
@@ -144,10 +177,10 @@ def condition_bucket(value: Any) -> str:
         "Heavily Stripped": -3,
     }
     age_score = {
-        "Like New (0-1 yr)": 2,
-        "Lightly Used (1-3 yr)": 1,
-        "Moderately Used (3-5 yr)": 0,
-        "Heavily Used (5+ yr)": -1,
+        "0-1 years": 2,
+        "1-5 years": 1,
+        "5-10 years": 0,
+        "10+ years": -1,
     }
 
     physical_condition = normalized["physical_condition"]
@@ -165,7 +198,7 @@ def condition_bucket(value: Any) -> str:
         physical_score[physical_condition]
         + functional_score[functional_status]
         + completeness_score[completeness]
-        + age_score[normalized["estimated_age_usage_tier"]]
+        + age_score[normalized["age_of_product"]]
     )
 
     if total_score >= 6:
@@ -183,7 +216,7 @@ def condition_display(value: Any) -> str:
                 normalized["physical_condition"],
                 normalized["functional_status"],
                 normalized["completeness"],
-                normalized["estimated_age_usage_tier"],
+                normalized["age_of_product"],
             ]
         )
 
@@ -204,5 +237,5 @@ def condition_reasoning_summary(value: Any) -> str:
         f"physical condition {normalized['physical_condition']}, "
         f"functional status {normalized['functional_status']}, "
         f"completeness {normalized['completeness']}, "
-        f"and usage tier {normalized['estimated_age_usage_tier']}"
+        f"and age of product {normalized['age_of_product']}"
     )

@@ -82,7 +82,6 @@ async def consume():
 
                 logger.info(f"[NOTIFIER] Processing UPC: {upc} | run_id: {run_id}")
 
-                # If SUMMARY exists but email wasn't sent yet, still send it.
                 async with AsyncSessionLocal() as db:
                     existing_summary_result = await db.execute(
                         select(WorkflowEvent)
@@ -98,18 +97,18 @@ async def consume():
                     existing_summary_id = (
                         existing_summary_event.id if existing_summary_event else None
                     )
-
-                existing_summary_payload = dict(
-                    _safe_payload(existing_summary_event.payload if existing_summary_event else {})
-                )
-                if bool(existing_summary_payload.get("email_sent")):
-                    logger.info(
-                        f"[NOTIFIER] Skipping duplicate email for UPC: {upc} | run_id: {run_id}"
+                    existing_email_result = await db.execute(
+                        select(WorkflowEvent)
+                        .where(
+                            WorkflowEvent.upc == upc,
+                            WorkflowEvent.run_id == run_id,
+                            WorkflowEvent.stage == "EMAIL",
+                        )
+                        .order_by(desc(WorkflowEvent.timestamp))
+                        .limit(1)
                     )
-                    continue
+                    existing_email_event = existing_email_result.scalar_one_or_none()
 
-                # Fetch ENRICHED and TRIAGE data for this run
-                async with AsyncSessionLocal() as db:
                     enriched_result = await db.execute(
                         select(WorkflowEvent.payload)
                         .where(
@@ -121,6 +120,18 @@ async def consume():
                         .limit(1)
                     )
                     product = enriched_result.scalar()
+
+                    assessment_result = await db.execute(
+                        select(WorkflowEvent.payload)
+                        .where(
+                            WorkflowEvent.upc == upc,
+                            WorkflowEvent.stage == "ASSESSMENT",
+                            WorkflowEvent.run_id == run_id,
+                        )
+                        .order_by(desc(WorkflowEvent.timestamp))
+                        .limit(1)
+                    )
+                    assessment_payload = _safe_payload(assessment_result.scalar())
 
                     triage_result = await db.execute(
                         select(WorkflowEvent.payload)
@@ -134,9 +145,23 @@ async def consume():
                     )
                     triage_payload = _safe_payload(triage_result.scalar())
 
+                existing_summary_payload = dict(
+                    _safe_payload(existing_summary_event.payload if existing_summary_event else {})
+                )
+                if existing_email_event:
+                    logger.info(
+                        f"[NOTIFIER] Skipping duplicate email for UPC: {upc} | run_id: {run_id}"
+                    )
+                    continue
+
                 if not product:
                     logger.error(
                         f"[NOTIFIER ERROR] No ENRICHED data for UPC {upc} and run_id {run_id}"
+                    )
+                    continue
+                if not assessment_payload:
+                    logger.error(
+                        f"[NOTIFIER ERROR] No ASSESSMENT data for UPC {upc} and run_id {run_id}"
                     )
                     continue
 
@@ -154,13 +179,15 @@ async def consume():
                 # 1. Resolve summary content
                 summary = existing_summary_payload.get("summary")
                 if not isinstance(summary, str) or not summary.strip():
-                    summary = await generate_summary(product, triage_payload, gains_payload)
+                    product_for_summary = dict(_safe_payload(product))
+                    product_for_summary["assessment"] = assessment_payload.get("assessment")
+                    summary = await generate_summary(
+                        product_for_summary, triage_payload, gains_payload
+                    )
 
                 # 2. Store final summary
                 async with AsyncSessionLocal() as db:
-                    # Use estimated_profit_percentage from triage response
-                    product_payload = _safe_payload(product)
-                    assessment = ensure_condition_payload(product_payload.get("condition"))
+                    assessment = ensure_condition_payload(assessment_payload)
                     estimated_profit = _to_float(
                         triage_payload.get(
                             "estimated_profit_percentage",
@@ -198,7 +225,6 @@ async def consume():
                         "refurbishment_complexity": refurbishment_complexity,
                         "expected_roi": expected_roi,
                         "summary": summary,
-                        "email_sent": False,
                     }
                     summary_event = None
                     if existing_summary_id:
@@ -240,26 +266,38 @@ async def consume():
                     """
                         await asyncio.to_thread(send_email, subject, body)
 
-                        latest_summary_result = await db.execute(
+                        email_payload = {
+                            "upc": upc,
+                            "run_id": run_id,
+                            "subject": subject,
+                            "summary": summary,
+                            "email_sent": True,
+                            "email_sent_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                        existing_email_result = await db.execute(
                             select(WorkflowEvent)
                             .where(
                                 WorkflowEvent.upc == upc,
                                 WorkflowEvent.run_id == run_id,
-                                WorkflowEvent.stage == "SUMMARY",
+                                WorkflowEvent.stage == "EMAIL",
                             )
                             .order_by(desc(WorkflowEvent.timestamp))
                             .limit(1)
                         )
-                        latest_summary_event = latest_summary_result.scalar_one_or_none()
-                        if latest_summary_event:
-                            latest_payload = dict(_safe_payload(latest_summary_event.payload))
-                            latest_payload["email_sent"] = True
-                            latest_payload["email_sent_at"] = datetime.now(
-                                timezone.utc
-                            ).isoformat()
-                            latest_summary_event.payload = latest_payload
-                            db.add(latest_summary_event)
-                            await db.commit()
+                        email_event = existing_email_result.scalar_one_or_none()
+                        if email_event:
+                            email_event.payload = email_payload
+                            db.add(email_event)
+                        else:
+                            db.add(
+                                WorkflowEvent(
+                                    upc=upc,
+                                    run_id=run_id,
+                                    stage="EMAIL",
+                                    payload=email_payload,
+                                )
+                            )
+                        await db.commit()
 
                         logger.info(f"[EMAIL] Successfully sent for UPC {upc}")
                     except Exception as e:

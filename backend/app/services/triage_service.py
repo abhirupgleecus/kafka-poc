@@ -106,13 +106,13 @@ def _to_float(value: Any, default: float = 0.0) -> float:
 
 
 def _fallback_triage(product: dict[str, Any]) -> dict[str, Any]:
-    assessment = condition_details(product.get("condition"))
+    assessment = condition_details(product.get("assessment") or product.get("condition"))
     condition = condition_bucket(assessment)
     estimated_price = _to_float(product.get("estimated_price"), 0.0)
     physical_condition = assessment["physical_condition"]
     functional_status = assessment["functional_status"]
     completeness = assessment["completeness"]
-    age_usage_tier = assessment["estimated_age_usage_tier"]
+    age_of_product = assessment["age_of_product"]
 
     if (
         physical_condition == "Damaged"
@@ -148,7 +148,7 @@ def _fallback_triage(product: dict[str, Any]) -> dict[str, Any]:
         if (
             functional_status in {"Partially Working", "Powers On But Faulty"}
             or completeness in {"Missing Accessories", "Missing Key Components"}
-            or age_usage_tier in {"Moderately Used (3-5 yr)", "Heavily Used (5+ yr)"}
+            or age_of_product in {"5-10 years", "10+ years"}
         ) and estimated_price >= 75:
             decision = "HARVEST"
             reason = (
@@ -212,13 +212,13 @@ Given product data, choose ONLY one:
 Goal: maximize profit.
 
 Rules:
-- Consider the condition assessment VERY IMPORTANT
-- The `condition` field may be a structured object with:
+- Consider the assessment VERY IMPORTANT
+- The `assessment` field may be a structured object with:
   - physical_condition
   - functional_status
   - completeness
-  - estimated_age_usage_tier
-- Use all provided condition subfields in your reasoning, not just physical_condition
+  - age_of_product
+- Use all provided assessment subfields in your reasoning, not just physical_condition
 - If `condition_bucket` is present, treat it only as a derived summary, not the primary evidence
 - Consider estimated_price
 - Consider Historical data of similar products (use your knowledge)

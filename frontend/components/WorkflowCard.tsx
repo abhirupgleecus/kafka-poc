@@ -4,6 +4,7 @@ import { memo, useMemo, useState } from "react";
 
 import { RunGroup } from "@/components/RunGroup";
 import type { WorkflowEvent, WorkflowResponse } from "@/lib/types";
+import { countVisibleEvents, isAssessmentDone, isAssessmentPending } from "@/lib/workflow";
 
 interface WorkflowCardProps {
   upc: string;
@@ -14,6 +15,8 @@ interface WorkflowCardProps {
   replayLoading: Record<string, boolean>;
   onRerun: (upc: string, runId: string) => Promise<void>;
   rerunLoading: Record<string, boolean>;
+  onSubmitAssessment: (upc: string, runId: string, payload: any) => Promise<void>;
+  assessmentLoading: Record<string, boolean>;
 }
 
 function groupByRun(events: WorkflowEvent[]): Record<string, WorkflowEvent[]> {
@@ -41,7 +44,9 @@ function WorkflowCardComponent({
   onReplay,
   replayLoading,
   onRerun,
-  rerunLoading
+  rerunLoading,
+  onSubmitAssessment,
+  assessmentLoading
 }: WorkflowCardProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -58,14 +63,36 @@ function WorkflowCardComponent({
   }, [workflow]);
 
   const runCount = groupedRuns.length;
-  const eventCount = workflow?.events.length ?? 0;
+  const eventCount = workflow ? countVisibleEvents(workflow.events) : 0;
+
+  const overallStatus = useMemo(() => {
+    if (groupedRuns.length === 0) return null;
+    // We check if ANY run is pending, otherwise if ANY is done
+    const runs = groupedRuns.map(g => g.events);
+    if (runs.some(isAssessmentPending)) return "PENDING";
+    if (runs.some(isAssessmentDone)) return "COMPLETED";
+    return null;
+  }, [groupedRuns]);
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">UPC</p>
-          <h3 className="text-xl font-bold text-ink">{upc}</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-bold text-ink">{upc}</h3>
+            {overallStatus && (
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  overallStatus === "COMPLETED"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                Assessment {overallStatus === "COMPLETED" ? "Complete" : "Pending"}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-slate-600">
             {runCount} run{runCount === 1 ? "" : "s"} - {eventCount} event{eventCount === 1 ? "" : "s"}
           </p>
@@ -103,6 +130,8 @@ function WorkflowCardComponent({
                   replayLoading={replayLoading}
                   onRerun={onRerun}
                   rerunLoading={rerunLoading}
+                  onSubmitAssessment={onSubmitAssessment}
+                  assessmentLoading={assessmentLoading}
                 />
               ))}
             </div>

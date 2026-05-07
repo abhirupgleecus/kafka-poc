@@ -5,9 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { InputSection } from "@/components/InputSection";
 import { ReplayHistoryModal } from "@/components/ReplayHistoryModal";
 import { WorkflowList } from "@/components/WorkflowList";
-import { fetchWorkflow, produceUpc, replayStage, rerunStage } from "@/lib/api";
+import { fetchWorkflow, produceUpc, replayStage, rerunStage, submitAssessment } from "@/lib/api";
 import { readKnownUpcs, writeKnownUpcs } from "@/lib/storage";
-import type { ProduceRequest, ReplayResponse, WorkflowResponse } from "@/lib/types";
+import type { ProduceRequest, ProductAssessment, ReplayResponse, WorkflowResponse } from "@/lib/types";
+import { workflowMatchesAssessmentFilter, groupByRun, isAssessmentPending, isRunComplete } from "@/lib/workflow";
 
 function getWorkflowTimestamp(workflow: WorkflowResponse | null | undefined): number {
   if (!workflow || workflow.events.length === 0) {
@@ -22,26 +23,13 @@ function hasInFlightRuns(workflow: WorkflowResponse | null | undefined): boolean
     return false;
   }
 
-  const stagesByRun = new Map<string, Set<string>>();
+  const runs = Object.values(groupByRun(workflow.events));
 
-  for (const event of workflow.events) {
-    const runId = event.run_id ?? "legacy-run";
-    const stage = event.stage.toUpperCase();
-
-    if (!stagesByRun.has(runId)) {
-      stagesByRun.set(runId, new Set<string>());
-    }
-
-    stagesByRun.get(runId)?.add(stage);
-  }
-
-  for (const stages of stagesByRun.values()) {
-    if (!stages.has("SUMMARY")) {
-      return true;
-    }
-  }
-
-  return false;
+  return runs.some((events) => {
+    const complete = isRunComplete(events);
+    const paused = isAssessmentPending(events);
+    return !complete && !paused;
+  });
 }
 
 export default function HomePage() {
@@ -60,6 +48,7 @@ export default function HomePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [filterUpc, setFilterUpc] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("all");
+  const [assessmentFilter, setAssessmentFilter] = useState<"all" | "pending" | "done">("all");
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -174,10 +163,16 @@ export default function HomePage() {
       });
     }
 
+    if (assessmentFilter !== "all") {
+      list = list.filter((upc) => {
+        return workflowMatchesAssessmentFilter(workflows[upc], assessmentFilter);
+      });
+    }
+
     return [...list].sort((a, b) => {
       return getWorkflowTimestamp(workflows[b]) - getWorkflowTimestamp(workflows[a]);
     });
-  }, [knownUpcs, workflows, filterUpc, timeFilter]);
+  }, [knownUpcs, workflows, filterUpc, timeFilter, assessmentFilter]);
 
   const handleProduce = useCallback(
     async (payload: ProduceRequest) => {
@@ -284,6 +279,27 @@ export default function HomePage() {
     [refreshWorkflow]
   );
 
+  const handleAssessmentSubmit = useCallback(
+    async (upc: string, runId: string, payload: ProductAssessment) => {
+      const key = `${upc}:${runId}:assessment`;
+      setReplayLoading((prev) => ({ ...prev, [key]: true }));
+      setActionMessage(null);
+      setActionError(null);
+
+      try {
+        await submitAssessment({ upc, run_id: runId, assessment: payload });
+        setActionMessage(`Assessment submitted for UPC ${upc}. Triage will proceed.`);
+        await refreshWorkflow(upc);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Assessment submission failed";
+        setActionError(message);
+      } finally {
+        setReplayLoading((prev) => ({ ...prev, [key]: false }));
+      }
+    },
+    [refreshWorkflow]
+  );
+
   return (
     <main className="px-4 py-10 sm:px-6">
       <InputSection
@@ -320,6 +336,10 @@ export default function HomePage() {
         onRerun={handleRerun}
         timeFilter={timeFilter}
         onTimeFilterChange={setTimeFilter}
+        assessmentFilter={assessmentFilter}
+        onAssessmentFilterChange={setAssessmentFilter}
+        onSubmitAssessment={handleAssessmentSubmit}
+        assessmentLoading={replayLoading} // Reusing the same map
       />
 
       <ReplayHistoryModal data={replayModalData} onClose={() => setReplayModalData(null)} />

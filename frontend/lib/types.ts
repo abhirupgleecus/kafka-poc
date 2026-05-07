@@ -1,4 +1,11 @@
-export type WorkflowStage = "RAW" | "ENRICHED" | "TRIAGE" | "GAINS" | "SUMMARY";
+export type WorkflowStage =
+  | "RAW"
+  | "ENRICHED"
+  | "ASSESSMENT"
+  | "TRIAGE"
+  | "GAINS"
+  | "SUMMARY"
+  | "EMAIL";
 export type ReplayStageStatus = "COMPLETED" | "PENDING";
 
 export interface WorkflowEvent {
@@ -44,17 +51,23 @@ export interface RerunResponse {
   upc: string;
   source_run_id: string;
   run_id: string;
-  condition: string;
+  assessment_status: "pending" | "copied";
+  assessment: string | null;
 }
 
 export interface ProductAssessment {
   physical_condition: string;
   functional_status: string;
   completeness: string;
-  estimated_age_usage_tier: string;
+  age_of_product: string;
 }
 
 export interface ProduceRequest {
   upc: string;
+}
+
+export interface AssessmentRequest {
+  upc: string;
+  run_id: string;
   assessment: ProductAssessment;
 }

@@ -1,4 +1,5 @@
 import type {
+  AssessmentRequest,
   ProduceRequest,
   ReplayRequest,
   ReplayResponse,
@@ -43,6 +44,13 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function produceUpc(payload: ProduceRequest): Promise<void> {
   await apiFetch("/api/produce", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function submitAssessment(payload: AssessmentRequest): Promise<void> {
+  await apiFetch("/api/assessment", {
     method: "POST",
     body: JSON.stringify(payload)
   });

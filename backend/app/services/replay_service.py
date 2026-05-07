@@ -8,7 +8,7 @@ from aiokafka import AIOKafkaConsumer
 from aiokafka.structs import TopicPartition
 from sqlalchemy import desc, select
 
-from app.services.condition_service import condition_bucket, condition_display, ensure_condition_payload
+from app.services.condition_service import condition_display, ensure_condition_payload
 from app.db.database import AsyncSessionLocal
 from app.kafka.producer import send_event
 from app.models.workflow import WorkflowEvent
@@ -18,12 +18,12 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
 
 KAFKA_STAGE_TOPIC_MAP = {
     "RAW": "raw_events",
-    "ENRICHED": "enriched_events",
+    "ASSESSMENT": "assessment_events",
     "TRIAGE": "triage_events",
     "GAINS": "gains_events",
 }
 
-RUN_STAGES = ("RAW", "ENRICHED", "TRIAGE", "GAINS", "SUMMARY")
+RUN_STAGES = ("RAW", "ENRICHED", "ASSESSMENT", "TRIAGE", "GAINS", "SUMMARY", "EMAIL")
 def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -170,15 +170,19 @@ async def fetch_run_history(upc: str, run_id: str) -> dict[str, Any]:
 
     raw_output = _safe_dict(stage_payloads.get("RAW", {}).get("payload"))
     enriched_output = _safe_dict(stage_payloads.get("ENRICHED", {}).get("payload"))
+    assessment_output = _safe_dict(stage_payloads.get("ASSESSMENT", {}).get("payload"))
     triage_output = _safe_dict(stage_payloads.get("TRIAGE", {}).get("payload"))
     gains_output = _safe_dict(stage_payloads.get("GAINS", {}).get("payload"))
     summary_output = _safe_dict(stage_payloads.get("SUMMARY", {}).get("payload"))
+    email_output = _safe_dict(stage_payloads.get("EMAIL", {}).get("payload"))
 
     raw_payload = raw_output if raw_output else None
     enriched_payload = enriched_output if enriched_output else None
+    assessment_payload = assessment_output if assessment_output else None
     triage_payload = triage_output if triage_output else None
     gains_payload = gains_output if gains_output else None
     summary_payload = summary_output if summary_output else None
+    email_payload = email_output if email_output else None
 
     stage_rows = [
         {
@@ -198,9 +202,24 @@ async def fetch_run_history(upc: str, run_id: str) -> dict[str, Any]:
             "timestamp": stage_payloads.get("ENRICHED", {}).get("timestamp"),
         },
         {
+            "stage": "ASSESSMENT",
+            "status": _stage_status(assessment_payload),
+            "input": enriched_payload,
+            "output": assessment_payload,
+            "notes": _stage_notes("ASSESSMENT", assessment_payload),
+            "timestamp": stage_payloads.get("ASSESSMENT", {}).get("timestamp"),
+        },
+        {
             "stage": "TRIAGE",
             "status": _stage_status(triage_payload),
-            "input": enriched_payload,
+            "input": (
+                {
+                    "enriched": enriched_payload,
+                    "assessment": assessment_payload,
+                }
+                if enriched_payload or assessment_payload
+                else None
+            ),
             "output": triage_payload,
             "notes": _stage_notes("TRIAGE", triage_payload),
             "timestamp": stage_payloads.get("TRIAGE", {}).get("timestamp"),
@@ -221,6 +240,14 @@ async def fetch_run_history(upc: str, run_id: str) -> dict[str, Any]:
             "notes": _stage_notes("SUMMARY", summary_payload),
             "timestamp": stage_payloads.get("SUMMARY", {}).get("timestamp"),
         },
+        {
+            "stage": "EMAIL",
+            "status": _stage_status(email_payload),
+            "input": summary_payload,
+            "output": email_payload,
+            "notes": _stage_notes("EMAIL", email_payload),
+            "timestamp": stage_payloads.get("EMAIL", {}).get("timestamp"),
+        },
     ]
 
     return {"status": "ok", "upc": upc, "run_id": run_id, "stages": stage_rows}
@@ -230,25 +257,35 @@ async def rerun_from_enriched(upc: str, run_id: str) -> dict[str, Any]:
     stage_payloads = await _fetch_stage_payloads_from_db(upc, run_id)
     source_raw = _safe_dict(stage_payloads.get("RAW", {}).get("payload"))
     source_enriched = _safe_dict(stage_payloads.get("ENRICHED", {}).get("payload"))
+    source_assessment = _safe_dict(stage_payloads.get("ASSESSMENT", {}).get("payload"))
 
     if not source_enriched:
         raise ValueError(f"No ENRICHED data found for UPC {upc} and run_id {run_id}")
 
     new_run_id = str(uuid.uuid4())
     assessment_source = (
-        source_enriched.get("assessment")
+        source_assessment.get("assessment")
         or source_raw.get("assessment")
+        or source_enriched.get("assessment")
         or source_enriched.get("condition")
     )
-    new_condition = ensure_condition_payload(assessment_source)
+    new_condition = ensure_condition_payload(assessment_source) if assessment_source else None
 
     rerun_payload = dict(source_enriched)
     rerun_payload["upc"] = upc
     rerun_payload["run_id"] = new_run_id
-    rerun_payload["condition"] = new_condition
-    rerun_payload["condition_bucket"] = condition_bucket(new_condition)
-
-    await send_event("enriched_events", rerun_payload)
+    assessment_status = "pending"
+    assessment_event_payload = None
+    if assessment_source:
+        assessment_event_payload = {
+            "event_id": str(uuid.uuid4()),
+            "upc": upc,
+            "run_id": new_run_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "assessment": new_condition,
+        }
+        await send_event("assessment_events", assessment_event_payload)
+        assessment_status = "copied"
 
     async with AsyncSessionLocal() as db:
         db.add(
@@ -259,6 +296,15 @@ async def rerun_from_enriched(upc: str, run_id: str) -> dict[str, Any]:
                 payload=rerun_payload,
             )
         )
+        if assessment_event_payload:
+            db.add(
+                WorkflowEvent(
+                    upc=upc,
+                    run_id=new_run_id,
+                    stage="ASSESSMENT",
+                    payload=assessment_event_payload,
+                )
+            )
         await db.commit()
 
     return {
@@ -266,5 +312,6 @@ async def rerun_from_enriched(upc: str, run_id: str) -> dict[str, Any]:
         "upc": upc,
         "source_run_id": run_id,
         "run_id": new_run_id,
-        "condition": condition_display(new_condition),
+        "assessment_status": assessment_status,
+        "assessment": condition_display(new_condition) if new_condition else None,
     }

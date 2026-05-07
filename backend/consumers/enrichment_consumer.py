@@ -4,12 +4,11 @@ import os
 import traceback
 import logging
 
-from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from aiokafka import AIOKafkaConsumer
 from dotenv import load_dotenv
 from sqlalchemy import select
 
 from app.services.enrichment_service import generate_product_data
-from app.services.condition_service import condition_bucket, ensure_condition_payload
 from app.db.database import AsyncSessionLocal, ensure_schema
 from app.models.workflow import WorkflowEvent
 
@@ -35,10 +34,7 @@ async def consume():
         auto_offset_reset=KAFKA_AUTO_OFFSET_RESET,
     )
 
-    producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS)
-
     await consumer.start()
-    await producer.start()
 
     try:
         async for msg in consumer:
@@ -70,19 +66,11 @@ async def consume():
                 # 1. Call LLM
                 product = await generate_product_data(upc)
 
-                # 2. Persist the full user assessment for downstream stages.
-                assessment = ensure_condition_payload(event.get("assessment"))
-                product["condition"] = assessment
-                product["condition_bucket"] = condition_bucket(assessment)
+                # 2. Persist enriched product data and wait for manual assessment.
                 product["upc"] = upc
                 product["run_id"] = run_id
 
-                # 3. Produce to next topic
-                await producer.send_and_wait(
-                    "enriched_events", json.dumps(product).encode("utf-8")
-                )
-
-                # 4. Store in DB
+                # 3. Store in DB
                 async with AsyncSessionLocal() as db:
                     db_event = WorkflowEvent(
                         upc=upc,
@@ -102,7 +90,6 @@ async def consume():
 
     finally:
         await consumer.stop()
-        await producer.stop()
 
 
 if __name__ == "__main__":

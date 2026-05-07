@@ -1,10 +1,17 @@
 "use client";
 
 import { memo } from "react";
-import { StageView } from "@/components/StageView";
-import type { WorkflowEvent } from "@/lib/types";
 
-const STAGES = ["ENRICHED", "TRIAGE", "GAINS", "SUMMARY"] as const;
+import { StageView } from "@/components/StageView";
+import type { ProductAssessment, WorkflowEvent } from "@/lib/types";
+import {
+  VISIBLE_STAGES,
+  getDerivedStageSet,
+  isAssessmentPending,
+  isRunComplete,
+  normalizeStage,
+  sortEvents
+} from "@/lib/workflow";
 
 interface RunGroupProps {
   upc: string;
@@ -12,26 +19,10 @@ interface RunGroupProps {
   events: WorkflowEvent[];
   onReplay: (upc: string, runId: string) => Promise<void>;
   onRerun: (upc: string, runId: string) => Promise<void>;
+  onSubmitAssessment: (upc: string, runId: string, payload: ProductAssessment) => Promise<void>;
   replayLoading: Record<string, boolean>;
   rerunLoading: Record<string, boolean>;
-}
-
-function sortEvents(events: WorkflowEvent[]): WorkflowEvent[] {
-  return [...events].sort((a, b) => {
-    return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-  });
-}
-
-// Map old stage names to new ones
-function mapStageName(stage: string): string {
-  const stageMap: Record<string, string> = {
-    "RAW": "ENRICHED",
-    "ENRICHED": "ENRICHED",
-    "TRIAGE": "TRIAGE",
-    "SUMMARY": "SUMMARY",
-    "GAINS": "GAINS"
-  };
-  return stageMap[stage.toUpperCase()] || stage.toUpperCase();
+  assessmentLoading: Record<string, boolean>;
 }
 
 function RunGroupComponent({
@@ -40,27 +31,32 @@ function RunGroupComponent({
   events,
   onReplay,
   onRerun,
+  onSubmitAssessment,
   replayLoading,
-  rerunLoading
+  rerunLoading,
+  assessmentLoading
 }: RunGroupProps) {
-  const sortedEvents = sortEvents(events).filter(event => event.stage.toUpperCase() !== "RAW");
-  const stageSet = new Set(sortedEvents.map((event) => mapStageName(event.stage)));
+  const sortedEvents = sortEvents(events).filter((event) => normalizeStage(event.stage) !== "RAW");
+  const stageSet = getDerivedStageSet(events);
   const replayKey = `${upc}:${runId}:replay`;
   const rerunKey = `${upc}:${runId}:rerun`;
+  const assessmentKey = `${upc}:${runId}:assessment`;
   const isReplaying = replayLoading[replayKey] === true;
   const isRerunning = rerunLoading[rerunKey] === true;
-
-  const hasSummary = stageSet.has("SUMMARY");
+  const isSavingAssessment = assessmentLoading[assessmentKey] === true;
   const hasEnriched = stageSet.has("ENRICHED");
+  const assessmentPending = isAssessmentPending(events);
+  const replayUnlocked = isRunComplete(events);
 
-  const completedInSequence = STAGES.reduce((count, stage, index) => {
+  const completedInSequence = VISIBLE_STAGES.reduce((count, stage, index) => {
     if (index > count) {
       return count;
     }
+
     return stageSet.has(stage) ? count + 1 : count;
   }, 0);
 
-  const progressPercent = (completedInSequence / STAGES.length) * 100;
+  const progressPercent = (completedInSequence / VISIBLE_STAGES.length) * 100;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
@@ -73,7 +69,7 @@ function RunGroupComponent({
           <button
             type="button"
             onClick={() => onReplay(upc, runId)}
-            disabled={isReplaying || !hasSummary}
+            disabled={isReplaying || !replayUnlocked}
             className="rounded-lg border border-accent-500/30 bg-accent-100 px-3 py-1 text-xs font-semibold text-accent-600 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isReplaying ? "Loading Replay..." : "Replay"}
@@ -89,26 +85,25 @@ function RunGroupComponent({
         </div>
       </div>
 
-      {!hasSummary ? (
-        <p className="mt-3 text-xs text-slate-500">Replay will unlock after this run reaches Final Summary stage.</p>
+      {!replayUnlocked ? (
+        <p className="mt-3 text-xs text-slate-500">
+          Replay will unlock after this run reaches the final Email stage.
+        </p>
       ) : null}
 
       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
-        <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200 relative">
-          <div 
-            className="h-full rounded-full bg-brand-600 transition-all duration-700 ease-in-out" 
-            style={{ width: `${progressPercent}%` }} 
+        <div className="relative h-3 w-full overflow-hidden rounded-full bg-slate-200">
+          <div
+            className="h-full rounded-full bg-brand-600 transition-all duration-700 ease-in-out"
+            style={{ width: `${progressPercent}%` }}
           />
-          {progressPercent < 100 && (
-            <div 
-              className="absolute inset-0 rounded-full animate-shimmer" 
-              style={{ width: `${progressPercent}%` }}
-            />
-          )}
+          {progressPercent < 100 ? (
+            <div className="absolute inset-0 animate-shimmer rounded-full" style={{ width: `${progressPercent}%` }} />
+          ) : null}
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {STAGES.map((stage) => {
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+          {VISIBLE_STAGES.map((stage) => {
             const done = stageSet.has(stage);
             return (
               <div
@@ -127,9 +122,28 @@ function RunGroupComponent({
       </div>
 
       <div className="mt-4 grid gap-3">
-        {sortedEvents.map((event, index) => (
-          <StageView key={`${event.stage}-${event.timestamp}-${index}`} event={event} />
-        ))}
+        {sortedEvents.map((event, index) => {
+          const normalizedStage = normalizeStage(event.stage);
+          return (
+            <StageView
+              key={`${event.stage}-${event.timestamp}-${index}`}
+              event={event}
+              assessmentStatus={
+                normalizedStage === "ENRICHED"
+                  ? stageSet.has("ASSESSMENT")
+                    ? "COMPLETED"
+                    : "PENDING"
+                  : undefined
+              }
+              onSubmitAssessment={
+                normalizedStage === "ENRICHED" && assessmentPending
+                  ? (payload) => onSubmitAssessment(upc, runId, payload)
+                  : undefined
+              }
+              assessmentLoading={normalizedStage === "ENRICHED" ? isSavingAssessment : false}
+            />
+          );
+        })}
       </div>
     </section>
   );

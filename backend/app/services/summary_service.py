@@ -61,8 +61,8 @@ Gains:
     gains_payload = gains if isinstance(gains, dict) else {}
     fallback = (
         f"UPC {product.get('upc', 'UNKNOWN')} was classified as "
-        f"{decision.get('decision', 'UNKNOWN')} based on condition "
-        f"{condition_display(product.get('condition'))} and expected profitability "
+        f"{decision.get('decision', 'UNKNOWN')} based on assessment "
+        f"{condition_display(product.get('assessment') or product.get('condition'))} and expected profitability "
         f"of {decision.get('estimated_profit_percentage', 0)}%. "
         f"Market demand is {gains_payload.get('market_demand', 'UNKNOWN')}, "
         f"resale potential is {gains_payload.get('resale_potential', 'UNKNOWN')}, "
