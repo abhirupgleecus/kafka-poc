@@ -7,6 +7,7 @@ from typing import Any
 import google.generativeai as genai
 from dotenv import load_dotenv
 from app.services.condition_service import condition_bucket, condition_details, condition_reasoning_summary
+from app.services.enriched_compat import get_estimated_price
 
 load_dotenv()
 
@@ -108,7 +109,7 @@ def _to_float(value: Any, default: float = 0.0) -> float:
 def _fallback_triage(product: dict[str, Any]) -> dict[str, Any]:
     assessment = condition_details(product.get("assessment") or product.get("condition"))
     condition = condition_bucket(assessment)
-    estimated_price = _to_float(product.get("estimated_price"), 0.0)
+    estimated_price = get_estimated_price(product)
     physical_condition = assessment["physical_condition"]
     functional_status = assessment["functional_status"]
     completeness = assessment["completeness"]

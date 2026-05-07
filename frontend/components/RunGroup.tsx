@@ -56,7 +56,11 @@ function RunGroupComponent({
     return stageSet.has(stage) ? count + 1 : count;
   }, 0);
 
-  const progressPercent = (completedInSequence / VISIBLE_STAGES.length) * 100;
+  const isComplete = completedInSequence === VISIBLE_STAGES.length;
+  // If not complete, the next stage after the last completed one is "In Progress"
+  const progressPercent = isComplete
+    ? 100
+    : ((completedInSequence + 0.5) / VISIBLE_STAGES.length) * 100;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
@@ -94,27 +98,43 @@ function RunGroupComponent({
       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
         <div className="relative h-3 w-full overflow-hidden rounded-full bg-slate-200">
           <div
-            className="h-full rounded-full bg-brand-600 transition-all duration-700 ease-in-out"
+            className={`h-full rounded-full transition-all duration-700 ease-in-out ${isComplete ? "bg-emerald-500" : "bg-brand-600"
+              }`}
             style={{ width: `${progressPercent}%` }}
           />
-          {progressPercent < 100 ? (
-            <div className="absolute inset-0 animate-shimmer rounded-full" style={{ width: `${progressPercent}%` }} />
+          {!isComplete ? (
+            <div
+              className="absolute inset-0 animate-shimmer rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
           ) : null}
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-          {VISIBLE_STAGES.map((stage) => {
-            const done = stageSet.has(stage);
+          {VISIBLE_STAGES.map((stage, index) => {
+            const isDone = stageSet.has(stage);
+            const isInProgress = !isDone && index === completedInSequence;
+
             return (
               <div
                 key={stage}
-                className={`rounded-lg border px-2 py-1 text-center text-[11px] font-semibold ${
-                  done
-                    ? "border-brand-300 bg-brand-50 text-brand-700"
-                    : "border-slate-200 bg-slate-50 text-slate-500"
-                }`}
+                className={`rounded-lg border px-2 py-1 text-center text-[10px] font-bold uppercase tracking-tight transition-all duration-300 ${isDone
+                    ? "border-brand-200 bg-brand-50 text-brand-700"
+                    : isInProgress
+                      ? "animate-pulse border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-slate-100 bg-slate-50 text-slate-400"
+                  }`}
               >
-                {stage} - {done ? "DONE" : "PENDING"}
+                {stage}
+                <span className="block text-[9px] opacity-80">
+                  {isDone
+                    ? "Done"
+                    : isInProgress
+                      ? stage === "ASSESSMENT"
+                        ? "Waiting for submission"
+                        : "In Progress"
+                      : "Pending"}
+                </span>
               </div>
             );
           })}

@@ -7,6 +7,7 @@ from typing import Any
 import google.generativeai as genai
 from dotenv import load_dotenv
 from app.services.condition_service import condition_bucket, condition_details
+from app.services.enriched_compat import get_estimated_price
 
 load_dotenv()
 

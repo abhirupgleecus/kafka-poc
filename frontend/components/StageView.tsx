@@ -120,62 +120,152 @@ export function StageView({
         <time className="text-xs text-slate-500">{formattedTime}</time>
       </div>
 
-      {isEnriched && payload ? (
-        <div className="mt-4 rounded-lg border border-brand-200 bg-brand-50 p-3">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-sm font-bold text-brand-900">
-                  {renderValue(payload.name) || renderValue(payload.product_name) || "Unknown Product"}
-                </p>
-                <p className="mt-1 text-xs text-brand-700">
-                  {[renderValue(payload.brand), renderValue(payload.category), renderValue(payload.estimated_price)]
-                    .filter((part): part is string => Boolean(part))
-                    .join(" • ") || "Awaiting manual assessment before triage."}
-                </p>
-              </div>
+      {isEnriched && payload ? (() => {
+        const metadata = payload.metadata as Record<string, unknown> | undefined;
+        const identity = (metadata?.identity ?? {}) as Record<string, unknown>;
+        const technical = payload.technical as Record<string, unknown> | undefined;
+        const compliance = payload.compliance as Record<string, unknown> | undefined;
+        const marketValue = payload.market_value as Record<string, unknown> | undefined;
 
-              {assessmentStatus ? (
-                <span
-                  className={`self-start rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                    assessmentStatus === "COMPLETED"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  Assessment {assessmentStatus === "COMPLETED" ? "Complete" : "Pending"}
-                </span>
-              ) : null}
-            </div>
+        // Backward compat: read from new nested or old flat format
+        const productName = renderValue(metadata?.name) || renderValue(payload.name) || renderValue(payload.product_name) || "Unknown Product";
+        const brand = renderValue(metadata?.brand) || renderValue(payload.brand);
+        const category = renderValue(metadata?.category) || renderValue(payload.category);
+        const price = renderValue(marketValue?.current_market_value) || renderValue(payload.estimated_price);
+        const productType = renderValue(metadata?.type);
 
-            {assessmentStatus === "PENDING" && onSubmitAssessment ? (
-              <div className="rounded-xl border border-dashed border-brand-200 bg-white/80 p-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-slate-700">
-                    Complete the human review here to unlock triage for this run.
+        const subtitle = [brand, category, price ? `$${price}` : null, productType].filter(Boolean).join(" • ");
+
+        return (
+          <div className="mt-4 rounded-lg border border-brand-200 bg-brand-50 p-3">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-brand-900">{productName}</p>
+                  <p className="mt-1 text-xs text-brand-700">
+                    {subtitle || "Awaiting manual assessment before triage."}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowAssessmentForm((current) => !current)}
-                    disabled={assessmentLoading}
-                    className="rounded-lg border border-brand-300 bg-white px-3 py-2 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {showAssessmentForm ? "Hide Assessment Form" : "Complete Assessment"}
-                  </button>
                 </div>
 
-                {showAssessmentForm ? (
-                  <AssessmentForm
-                    loading={assessmentLoading}
-                    onSubmit={handleAssessmentSubmit}
-                    onCancel={() => setShowAssessmentForm(false)}
-                  />
+                {assessmentStatus ? (
+                  <span
+                    className={`self-start rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      assessmentStatus === "COMPLETED"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    Assessment {assessmentStatus === "COMPLETED" ? "Complete" : "Pending"}
+                  </span>
                 ) : null}
               </div>
-            ) : null}
+
+              {/* Technical & Compliance chips (new format only) */}
+              {technical ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {renderValue(technical.weight) ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      ⚖️ {renderValue(technical.weight)}
+                    </span>
+                  ) : null}
+                  {renderValue(technical.dimensions) ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      📐 {renderValue(technical.dimensions)}
+                    </span>
+                  ) : null}
+                  {renderValue(technical.disassembly_complexity) ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      🔧 Disassembly: {renderValue(technical.disassembly_complexity)}
+                    </span>
+                  ) : null}
+                  {renderValue(technical.average_life_span) ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      ⏱ Lifespan: {renderValue(technical.average_life_span)}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {compliance ? (() => {
+                const hazMats = Array.isArray(compliance.hazardous_materials) ? compliance.hazardous_materials as string[] : [];
+                const needsAuth = String(compliance.authorized_needed).toLowerCase() === "yes";
+                const hasUserData = String(compliance.contains_user_data).toLowerCase() === "yes";
+
+                return (hazMats.length > 0 || needsAuth || hasUserData) ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {needsAuth ? (
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                        ⚠ Authorized Recycler Needed
+                      </span>
+                    ) : null}
+                    {hasUserData ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        🔒 Contains User Data
+                      </span>
+                    ) : null}
+                    {hazMats.map((mat) => (
+                      <span key={mat} className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                        ☣ {String(mat)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null;
+              })() : null}
+
+              {/* Market value summary (new format only) */}
+              {marketValue ? (
+                <div className="grid gap-1.5 sm:grid-cols-3">
+                  {renderValue(marketValue.current_market_value) ? (
+                    <div className="rounded-lg bg-white/60 px-2.5 py-1.5">
+                      <p className="text-[10px] font-semibold uppercase text-slate-500">Market Value</p>
+                      <p className="text-sm font-bold text-brand-900">${renderValue(marketValue.current_market_value)}</p>
+                    </div>
+                  ) : null}
+                  {renderValue(marketValue.refurbished_market_value) ? (
+                    <div className="rounded-lg bg-white/60 px-2.5 py-1.5">
+                      <p className="text-[10px] font-semibold uppercase text-slate-500">Refurbished Value</p>
+                      <p className="text-sm font-bold text-emerald-700">${renderValue(marketValue.refurbished_market_value)}</p>
+                    </div>
+                  ) : null}
+                  {renderValue(marketValue.disposal_cost) ? (
+                    <div className="rounded-lg bg-white/60 px-2.5 py-1.5">
+                      <p className="text-[10px] font-semibold uppercase text-slate-500">Disposal Cost</p>
+                      <p className="text-sm font-bold text-rose-700">${renderValue(marketValue.disposal_cost)}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {assessmentStatus === "PENDING" && onSubmitAssessment ? (
+                <div className="rounded-xl border border-dashed border-brand-200 bg-white/80 p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-700">
+                      Complete the human review here to unlock triage for this run.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAssessmentForm((current) => !current)}
+                      disabled={assessmentLoading}
+                      className="rounded-lg border border-brand-300 bg-white px-3 py-2 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {showAssessmentForm ? "Hide Assessment Form" : "Complete Assessment"}
+                    </button>
+                  </div>
+
+                  {showAssessmentForm ? (
+                    <AssessmentForm
+                      loading={assessmentLoading}
+                      onSubmit={handleAssessmentSubmit}
+                      onCancel={() => setShowAssessmentForm(false)}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
+
 
       {isAssessment && payload ? (
         <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3">
