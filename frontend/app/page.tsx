@@ -49,6 +49,7 @@ export default function HomePage() {
   const [filterUpc, setFilterUpc] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("all");
   const [assessmentFilter, setAssessmentFilter] = useState<"all" | "pending" | "done">("all");
+  const [isFiltering, setIsFiltering] = useState(false);
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -335,11 +336,20 @@ export default function HomePage() {
         onReplay={handleReplay}
         onRerun={handleRerun}
         timeFilter={timeFilter}
-        onTimeFilterChange={setTimeFilter}
+        onTimeFilterChange={(val) => {
+          setIsFiltering(true);
+          setTimeFilter(val);
+          setTimeout(() => setIsFiltering(false), 600);
+        }}
         assessmentFilter={assessmentFilter}
-        onAssessmentFilterChange={setAssessmentFilter}
+        onAssessmentFilterChange={(val) => {
+          setIsFiltering(true);
+          setAssessmentFilter(val);
+          setTimeout(() => setIsFiltering(false), 600);
+        }}
         onSubmitAssessment={handleAssessmentSubmit}
         assessmentLoading={replayLoading} // Reusing the same map
+        isFiltering={isFiltering}
       />
 
       <ReplayHistoryModal data={replayModalData} onClose={() => setReplayModalData(null)} />

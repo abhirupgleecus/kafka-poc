@@ -30,32 +30,28 @@ async def generate_summary(
     product: dict, decision: dict, gains: dict | None = None
 ) -> str:
     prompt = f"""
-You are generating a concise business summary.
+You are a senior secondary market analyst. Generate a data-dense Triage Summary Report.
 
-Given:
-- product data
-- triage decision
-- gains analysis metrics
+### Telemetry:
+- Product: {json.dumps(product)}
+- Condition: {json.dumps(decision.get('assessment') or product.get('assessment') or product.get('condition'))}
+- Decision: {json.dumps(decision.get('decision') or decision.get('triage_decision'))}
+- Financials: {json.dumps(gains or {})}
 
-Write a short 2-3 sentence explanation explaining WHY this decision was made.
+### Output Structure (Strictly Follow):
+1. **STRATEGIC OVERVIEW**: 1-2 dense paragraphs explaining the logic. Use real-world citations formatted EXACTLY as `[[*Source Name*]](URL)` (e.g., `[[*eBay Market Trends*]](https://www.ebay.com/sch/i.html?_nkw=Product+Name+Sold)`) to justify value/demand.
+   - Use live search query URLs (eBay sold listings, Google Market results) whenever possible to provide "real-world" proof of your claims.
+   - The citations must be inline and italicized within the brackets as shown.
+2. **KEY PARAMETERS**: 4-6 bullet points of strategic metrics.
+3. **STRATEGIC CONCLUSION**: 2-line final impact statement.
 
-Focus on:
-- the full condition assessment
-- if `condition` is an object, mention the important subfields that drove the outcome
-- resale value
-- profitability
-- market demand and ROI signals
-
-Return ONLY plain text (no JSON).
-
-Product:
-{json.dumps(product)}
-
-Decision:
-{json.dumps(decision)}
-
-Gains:
-{json.dumps(gains or {})}
+### Mandatory Rules:
+- DO NOT include drafts, "Draft 1", "Check against constraints", or any internal reasoning.
+- DO NOT include the instructions or prompt text in your response.
+- Start your response IMMEDIATELY with the "STRATEGIC OVERVIEW" header.
+- Use a professional, analytical tone.
+- Use plain text for headers (e.g., STRATEGIC OVERVIEW) rather than Markdown symbols if possible, to keep the UI clean.
+- Ensure all numbers and dollar amounts are mentioned clearly.
 """
 
     gains_payload = gains if isinstance(gains, dict) else {}

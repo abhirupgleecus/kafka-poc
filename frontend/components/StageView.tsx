@@ -61,6 +61,33 @@ export function StageView({
     event.payload && typeof event.payload === "object"
       ? (event.payload as Record<string, unknown>)
       : null;
+
+  const formatSummary = (text: string) => {
+    if (!text) return null;
+
+    // Matches [[*Label*]](URL)
+    const parts = text.split(/(\[\[\*.+?\*\]\]\(https?:\/\/\S+?\))/g);
+
+    return parts.map((part, i) => {
+      const match = part.match(/\[\[\*(.+?)\*\]\]\((https?:\/\/\S+?)\)/);
+      if (match) {
+        const [, label, url] = match;
+        return (
+          <a
+            key={i}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-sm bg-brand-50 px-1 font-medium text-brand-600 transition hover:bg-brand-100 hover:text-brand-700 underline decoration-brand-300 underline-offset-2"
+          >
+            [<i>{label}</i>]
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   const stage = event.stage.toUpperCase();
   const isEnriched = stage === "ENRICHED";
   const isAssessment = stage === "ASSESSMENT";
@@ -240,7 +267,7 @@ export function StageView({
                 <div className="rounded-xl border border-dashed border-brand-200 bg-white/80 p-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-slate-700">
-                      Complete the human review here to unlock triage for this run.
+                      Complete the human review here to unlock triage for this asset.
                     </p>
                     <button
                       type="button"
@@ -343,10 +370,17 @@ export function StageView({
       ) : null}
 
       {isSummary && payload ? (
-        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-sm leading-relaxed text-slate-700">
-            {renderValue(payload.summary) || renderValue(payload.final_summary) || "No summary available."}
-          </p>
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-slate-50/50 px-4 py-2">
+            <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600">
+              <span className="text-lg">📋</span> Strategic Triage Report
+            </h4>
+          </div>
+          <div className="p-4">
+            <div className="prose-sm whitespace-pre-line text-sm leading-relaxed text-slate-700">
+              {formatSummary(renderValue(payload.summary) || renderValue(payload.final_summary) || "") || "No report available."}
+            </div>
+          </div>
         </div>
       ) : null}
 

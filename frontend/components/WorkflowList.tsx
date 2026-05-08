@@ -18,6 +18,7 @@ interface WorkflowListProps {
   onAssessmentFilterChange: (value: "all" | "pending" | "done") => void;
   onSubmitAssessment: (upc: string, runId: string, payload: any) => Promise<void>;
   assessmentLoading: Record<string, boolean>;
+  isFiltering?: boolean;
 }
 
 export function WorkflowList({
@@ -34,7 +35,8 @@ export function WorkflowList({
   assessmentFilter,
   onAssessmentFilterChange,
   onSubmitAssessment,
-  assessmentLoading
+  assessmentLoading,
+  isFiltering = false
 }: WorkflowListProps) {
   return (
     <section className="mx-auto mt-8 w-full max-w-6xl">
@@ -77,7 +79,12 @@ export function WorkflowList({
         </div>
       </div>
 
-      {upcs.length === 0 ? (
+      {isFiltering ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="spinner mb-4" />
+          <p className="text-sm font-medium text-slate-500">Updating history view...</p>
+        </div>
+      ) : upcs.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-10 text-center">
           <p className="text-sm text-slate-600">No UPC workflows yet. Submit a UPC above to start the pipeline.</p>
           <p className="mt-2 text-xs text-slate-500">

@@ -94,7 +94,7 @@ function WorkflowCardComponent({
             )}
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            {runCount} run{runCount === 1 ? "" : "s"} - {eventCount} event{eventCount === 1 ? "" : "s"}
+            {runCount} run{runCount === 1 ? "" : "s"}
           </p>
         </div>
 
