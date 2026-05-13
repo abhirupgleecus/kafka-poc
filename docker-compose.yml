@@ -12,10 +12,12 @@ services:
       - --node-id 0
       - --check=false
       - --kafka-addr PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr PLAINTEXT://localhost:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092
     ports:
       - "9092:9092"
       - "9644:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
 
   postgres:
     image: postgres:15
@@ -29,5 +31,91 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  backend:
+    build: ./backend
+    container_name: backend
+    depends_on:
+      - postgres
+      - redpanda
+    environment:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_MODEL: gemini-3.1-flash-lite-preview
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      EMAIL_TO: ${EMAIL_TO}
+      RUN_CONSUMERS_IN_API: "false"
+    restart: on-failure
+    ports:
+      - "8000:8000"
+
+  triage-consumer:
+    build: ./backend
+    command: python -m consumers.triage_consumer
+    depends_on:
+      - redpanda
+      - postgres
+    environment:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    restart: on-failure
+
+  enrichment-consumer:
+    build: ./backend
+    command: python -m consumers.enrichment_consumer
+    depends_on:
+      - redpanda
+      - postgres
+    environment:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+    restart: on-failure
+
+  gains-consumer:
+    build: ./backend
+    command: python -m consumers.gains_consumer
+    depends_on:
+      - redpanda
+      - postgres
+    environment:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    restart: on-failure
+
+  notifier-consumer:
+    build: ./backend
+    command: python -m consumers.notifier_consumer
+    depends_on:
+      - redpanda
+      - postgres
+    environment:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      EMAIL_TO: ${EMAIL_TO}
+    restart: on-failure
+
+  frontend:
+    build: 
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: frontend
+    depends_on:
+      - backend
+    environment:
+      BACKEND_API_BASE_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+
 volumes:
   postgres_data:
+  redpanda_data:

@@ -260,7 +260,7 @@ export default function HomePage() {
       try {
         const result = await rerunStage({ upc, run_id: runId });
         setActionMessage(
-          `Rerun started for UPC ${upc}. New run_id: ${result.run_id}. Condition: ${result.condition}.`
+          `Rerun started for UPC ${upc}. New run_id: ${result.run_id}. Assessment: ${result.assessment || "Pending"}.`
         );
         await refreshWorkflow(upc);
       } catch (error) {
