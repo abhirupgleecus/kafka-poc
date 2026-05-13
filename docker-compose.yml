@@ -42,7 +42,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      GEMINI_MODEL: gemini-3.1-flash-lite-preview
+      GEMINI_MODEL: ${GEMINI_MODEL}
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
       EMAIL_TO: ${EMAIL_TO}
@@ -61,6 +61,8 @@ services:
       PYTHONPATH: .
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
     restart: on-failure
 
   enrichment-consumer:
@@ -74,6 +76,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
     restart: on-failure
 
   gains-consumer:
@@ -86,6 +89,8 @@ services:
       PYTHONPATH: .
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
     restart: on-failure
 
   notifier-consumer:
@@ -98,6 +103,8 @@ services:
       PYTHONPATH: .
       DATABASE_URL: postgresql+asyncpg://postgres:password@postgres:5432/triage_db
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
       EMAIL_TO: ${EMAIL_TO}
