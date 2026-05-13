@@ -5,25 +5,26 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 from app.services.condition_service import condition_display
+import logging
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 model = genai.GenerativeModel(GEMINI_MODEL)
-
 
 def clean_json(text: str) -> str:
     text = text.strip()
-
     if text.startswith("```"):
         text = text.strip("`")
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
-
     return text
+
 
 
 async def generate_summary(
@@ -71,5 +72,6 @@ You are a senior secondary market analyst. Generate a data-dense Triage Summary 
         text = getattr(response, "text", "") or ""
         cleaned = text.strip()
         return cleaned if cleaned else fallback
-    except Exception:
+    except Exception as e:
+        logger.error(f"Gemini API Error (Summary) for UPC {product.get('upc')}: {str(e)}")
         return fallback

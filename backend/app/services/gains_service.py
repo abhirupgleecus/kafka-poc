@@ -3,6 +3,9 @@ import json
 import math
 import os
 from typing import Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -13,7 +16,7 @@ load_dotenv()
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 model = genai.GenerativeModel(GEMINI_MODEL)
 MARKET_DEMAND = {"HIGH", "MEDIUM", "LOW"}
 RESALE_POTENTIAL = {"EXCELLENT", "GOOD", "FAIR", "POOR"}
@@ -260,5 +263,6 @@ Triage Decision:
         text = getattr(response, "text", "") or ""
         parsed = _extract_json_object(text)
         return _normalize_gains(parsed, product, triage_decision)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Gemini API Error (Gains) for UPC {product.get('metadata', {}).get('identity', {}).get('upc')}: {str(e)}")
         return _fallback_gains(product, triage_decision)

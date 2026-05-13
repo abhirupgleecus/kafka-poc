@@ -12,7 +12,7 @@ load_dotenv()
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemma-4-31b-it")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 model = genai.GenerativeModel(GEMINI_MODEL)
 
 
