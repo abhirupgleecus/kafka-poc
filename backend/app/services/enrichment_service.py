@@ -5,15 +5,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
-model = genai.GenerativeModel(GEMINI_MODEL)
+google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
 
 def clean_json(text: str) -> str:
@@ -319,7 +320,14 @@ Schema:
 UPC: {upc}"""
 
     try:
-        response = await asyncio.to_thread(model.generate_content, prompt)
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[google_search_tool]
+            )
+        )
         text = getattr(response, "text", "") or ""
         parsed = _extract_json_object(text)
         return _normalize_product(upc, parsed)
